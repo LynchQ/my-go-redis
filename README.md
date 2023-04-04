@@ -8,3 +8,6 @@ go mod init github.com/LynchQ/my-go-redis
 ```
 
 新建main.go文件
+
+2023-04-05
+添加lib，config，tcp模块
