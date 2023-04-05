@@ -2,6 +2,7 @@ package tcp
 
 /**
  * 用于测试服务器是否正常工作的echo服务器
+ * 发送什么回复什么
  */
 
 import (
@@ -22,7 +23,7 @@ import (
 // EchoHandler echos接收到客户的线路，用于测试
 type EchoHandler struct {
 	activeConn sync.Map       // 活跃的连接
-	closing    atomic.Boolean // 是否关闭
+	closing    atomic.Boolean // 是否关闭  由于多线程并发问题，需要原子操作
 }
 
 // MakeEchoHandler 创建EchoHandler
@@ -30,7 +31,7 @@ func MakeHandler() *EchoHandler {
 	return &EchoHandler{}
 }
 
-// MakeEchoHandler 创建EchoHandler 用于测试
+// EchoClient 是EchoHandler的客户端，用于测试
 type EchoClient struct {
 	Conn    net.Conn  // 连接
 	Waiting wait.Wait // 等待
@@ -39,8 +40,8 @@ type EchoClient struct {
 // Close 关闭连接
 func (c *EchoClient) Close() error {
 	c.Waiting.WaitWithTimeout(10 * time.Second) // 等待10秒
-	c.Conn.Close()
-	return nil
+	_ = c.Conn.Close()                          // 关闭连接
+	return nil                                  // 返回nil
 }
 
 // Handle echos接收到客户的线路
@@ -53,8 +54,8 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 	client := &EchoClient{
 		Conn: conn,
 	}
-	// 存储客户端
-	h.activeConn.Store(client, struct{}{})
+	// 存储客户端 由于多线程并发问题，需要原子操作 sync.Map.Store(key, value interface{})
+	h.activeConn.Store(client, struct{}{}) // 存入空结构体 用于占位 形成hashmap
 
 	// 读取客户端的数据
 	reader := bufio.NewReader(conn)
@@ -65,12 +66,15 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 		if err != nil {
 			if err == io.EOF {
 				// 客户端关闭连接
+				logger.Info("client closed connection")
 				h.activeConn.Delete(client)
 				return
+			} else {
+				// 其他错误
+				logger.Warn("read error: %s", err)
+				// 删除客户端
+				h.activeConn.Delete(client)
 			}
-			// 其他错误
-			logger.Warn("read error: %s", err)
-			h.activeConn.Delete(client)
 			return
 		}
 		client.Waiting.Add(1) // 等待
@@ -88,7 +92,7 @@ func (h *EchoHandler) Close() error {
 	// 关闭所有连接
 	h.activeConn.Range(func(key interface{}, val interface{}) bool {
 		client := key.(*EchoClient)
-		_ = client.Close()
+		_ = client.Conn.Close()
 		return true
 	})
 	return nil

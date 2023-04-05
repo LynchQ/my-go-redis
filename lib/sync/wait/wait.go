@@ -1,5 +1,8 @@
 package wait
 
+/**
+ * 自己实现waitgroup，用于等待所有的goroutine完成 以及 超时
+ */
 import (
 	"sync"
 	"time"

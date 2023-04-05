@@ -1,6 +1,9 @@
 package logger
 
-import "os"
+import (
+	"fmt"
+	"os"
+)
 
 // checkNotExist 检查文件或目录是否存在。
 func checkNotExist(src string) bool {
@@ -38,7 +41,7 @@ func mustOpen(fileName, dir string) (*os.File, error) {
 	// 检查目录是否有权限
 	perm := checkPermission(dir)
 	if perm == true {
-		rturn nil, fmt.Errorf("permission denied dir: %s", dir)
+		return nil, fmt.Errorf("permission denied dir: %s", dir)
 	}
 	// 如果目录不存在，则创建目录
 	err := isNotExistMkDir(dir)

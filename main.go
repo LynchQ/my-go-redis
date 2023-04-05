@@ -15,14 +15,14 @@ const configFile string = "redis.conf"
 // 默认配置
 var defaultProperties = &config.ServerProperties{
 	Bind: "0.0.0.0",
-	Port: 6379,
+	Port: 6399,
 }
 
 func fileExists(filename string) bool {
 	info, err := os.Stat(filename)
 	// q: && !info.IsDir()是什么意思？
 	// a: 如果err == nil && !info.IsDir()为真，说明文件存在且不是目录
-	return !info.IsDir() && err == nil
+	return err == nil && !info.IsDir()
 }
 func main() {
 	// 初始化日志
@@ -40,7 +40,7 @@ func main() {
 	} else {
 		config.Properties = defaultProperties
 	}
-
+	logger.Info("config: %+v", config.Properties)
 	// 启动服务
 	err := tcp.ListenAndServeWithSignal(
 		&tcp.Config{
