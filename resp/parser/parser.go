@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"strconv"
 
 	"github.com/LynchQ/my-go-redis/interface/resp"
 )
@@ -78,4 +79,31 @@ func readLine(bufReader *bufio.Reader, state *readState) ([]byte, bool, error) {
 	}
 
 	return msg, false, nil
+}
+
+// parseMultiBulkHeader 用来改变解析器的状态 (解析多行)
+func parseMultiBulkHeader(msg []byte, state *readState) error {
+	var err error
+	var expectedLine uint64 // 期望的行数
+
+	// 1. 解析出期望的行数
+	expectedLine, err = strconv.ParseUint(string(msg[1:len(msg)-2]), 10, 32) // 10进制 32位
+	if err != nil {
+		return errors.New("protocol error: " + string(msg)) // 协议错误
+	}
+
+	// 2. 根据期望的行数，改变解析器的状态
+	if expectedLine == 0 {
+		state.expectedArgsCount = 0
+		return nil
+	} else if expectedLine > 0 {
+		// 期望的行数大于 0，就是多行
+		state.msgType = msg[0]                       // 消息类型
+		state.redingMultiLine = true                 // 是否正在读取多行
+		state.expectedArgsCount = int(expectedLine)  // 期望的参数个数
+		state.args = make([][]byte, 0, expectedLine) // 命令参数
+		return nil
+	} else {
+		return errors.New("protocol error: " + string(msg)) // 协议错误
+	}
 }
