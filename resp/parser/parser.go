@@ -5,8 +5,10 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/LynchQ/my-go-redis/interface/resp"
+	"github.com/LynchQ/my-go-redis/resp/reply"
 )
 
 // 客户端发送的命令 和 我们回复的消息 都是 resp.Reply 类型的
@@ -130,4 +132,26 @@ func parseBulkHeader(msg []byte, state *readState) error {
 	} else {
 		return errors.New("protocol error: " + string(msg)) // 协议错误
 	}
+}
+
+// parseSingleLineReplly
+func parseSingleLineReply(msg []byte) (resp.Reply, error) {
+	str := strings.TrimSuffix(string(msg), "\r\n") // 去掉 \r\n
+
+	var result resp.Reply
+	// 根据第一个字符，判断是什么类型的回复
+	switch msg[0] {
+	case '+': // 状态回复
+		result = reply.MakeStatusReply(str[1:])
+	case '-': // 错误回复
+		result = reply.MakeErrReply(str[1:])
+
+	case ':': // 整数回复
+		val, err := strconv.ParseInt(str[1:], 10, 64) // strconv.ParseInt 用来解析整数
+		if err != nil {
+			return nil, errors.New("protocol error: " + string(msg))
+		}
+		result = reply.MakeIntReply(val)
+	}
+	return result, nil
 }
