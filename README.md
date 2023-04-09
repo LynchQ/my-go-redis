@@ -46,3 +46,5 @@ Redis Serialization Protocol，Redis序列化协议，是Redis的通信协议，
 实现parserSingleLineReply方法，解析单行字符串
 实现readBody方法，读取body
 实现parse method，解析RESP协议
+
+实现Connection
