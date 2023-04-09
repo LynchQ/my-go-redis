@@ -143,9 +143,9 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 			if state.finished() {
 				var result resp.Reply
 				if state.msgType == '*' {
-					result = &reply.MultiBulkReply{Args: state.args}
+					result = reply.MakeMultiBulkReply(state.args)
 				} else if state.msgType == '$' {
-					result = &reply.BulkReply{Arg: state.args[0]}
+					result = reply.MakeBulkReply(state.args[0])
 				}
 				ch <- &Payload{
 					Data: result,
@@ -230,7 +230,6 @@ func parseBulkHeader(msg []byte, state *readState) error {
 
 	// 2. 如果长度是 -1，就是空值
 	if state.bulkLen == -1 {
-		state.args = append(state.args, nil)
 		return nil
 	} else if state.bulkLen > 0 {
 		state.msgType = msg[0]            // 消息类型
@@ -279,9 +278,9 @@ func readBody(msg []byte, state *readState) error {
 		if state.bulkLen < 0 { // 如果长度是 -1，就是空值
 			state.args = append(state.args, []byte{})
 			state.bulkLen = 0
-		} else {
-			state.args = append(state.args, line[1:])
 		}
+	} else {
+		state.args = append(state.args, line)
 	}
 	return nil
 }
