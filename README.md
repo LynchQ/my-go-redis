@@ -38,3 +38,5 @@ Redis Serialization Protocol，Redis序列化协议，是Redis的通信协议，
   - eg: `*2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n`
   - SET key value
   - `*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n`
+实现自定义reply
+实现ParseStrema方法，解析RESP协议
