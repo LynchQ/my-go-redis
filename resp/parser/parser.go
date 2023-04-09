@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
 	"github.com/LynchQ/my-go-redis/interface/resp"
+	"github.com/LynchQ/my-go-redis/lib/logger"
 	"github.com/LynchQ/my-go-redis/resp/reply"
 )
 
@@ -31,13 +33,6 @@ func (s *readState) finished() bool {
 	return s.expectedArgsCount > 0 && len(s.args) == s.expectedArgsCount
 }
 
-// 解析器核心
-func parse0(reader io.Reader, ch chan<- *Payload) {
-	// 1. 读取一个字节
-	// 2. 根据字节类型，调用不同的解析函数
-	// 3. 解析完成后，把解析结果放到 channel 中
-}
-
 // 解析器的入口，异步解析
 func ParseStream(reader io.Reader) <-chan *Payload {
 	// 1. 创建一个 channel
@@ -46,6 +41,120 @@ func ParseStream(reader io.Reader) <-chan *Payload {
 	go parse0(reader, ch)
 	// 3. 返回 channel
 	return ch
+}
+
+// 解析器核心
+func parse0(reader io.Reader, ch chan<- *Payload) {
+	defer func() {
+		// 如果解析过程中出现 panic，就会在这里捕获
+		// recover() 会返回 panic 的值
+		if err := recover(); err != nil {
+			logger.Error(string(debug.Stack()))
+		}
+	}()
+
+	// 创建一个 bufio.Reader 对象 用于读取数据
+	bufReader := bufio.NewReader(reader)
+	var state readState // 解析器的状态
+	var err error       //	错误
+	var msg []byte      // 读取到的数据
+
+	for {
+		// 1. 读取一个字节
+		var ioErr bool // 是否是 io 错误
+		msg, ioErr, err = readLine(bufReader, &state)
+		if err != nil {
+			if ioErr { // 如果是 io 错误，就关闭 channel，结束解析
+				ch <- &Payload{
+					Err: err,
+				}
+				close(ch)
+				return
+			}
+			// 如果是协议错误，重置状态，继续解析
+			ch <- &Payload{
+				Err: err,
+			}
+			state = readState{}
+			continue
+		}
+
+		// 2. 根据字节类型，调用不同的解析函数
+		if !state.redingMultiLine { // 没有在读取多行, 也许是还没有开始解析
+			if msg[0] == '*' {
+				// 读取到 * 开头的，说明是多行
+				// 解析多行
+				err = parseMultiBulkHeader(msg, &state)
+				if err != nil {
+					ch <- &Payload{
+						Err: errors.New("protocol error: " + string(msg)),
+					}
+					state = readState{}
+					continue
+				}
+				// 如果参数个数是 0，就直接把解析结果放到 channel 中
+				if state.expectedArgsCount == 0 {
+					ch <- &Payload{
+						Data: &reply.EmptyMultiBulkReply{},
+					}
+					state = readState{}
+					continue
+				}
+			} else if msg[0] == '$' {
+				// 读取到 $ 开头的，说明是多行的一部分
+				err = parseBulkHeader(msg, &state)
+				if err != nil {
+					ch <- &Payload{
+						Err: errors.New("protocol error: " + string(msg)),
+					}
+					state = readState{}
+					continue
+				}
+				if state.bulkLen == -1 {
+					ch <- &Payload{
+						Data: &reply.NullBulkReply{},
+					}
+					state = readState{}
+					continue
+				}
+			} else {
+				// 读取到 + 开头的，说明是单行
+				// 解析单行
+				result, err := parseSingleLineReply(msg)
+
+				ch <- &Payload{
+					Data: result,
+					Err:  err,
+				}
+				state = readState{}
+				continue
+			}
+		} else {
+			// 3. 如果是多行，就继续读取
+			err = readBody(msg, &state)
+			if err != nil {
+				ch <- &Payload{
+					Err: errors.New("protocol error: " + string(msg)),
+				}
+				state = readState{}
+				continue
+			}
+			// 4. 如果读取完成，就把解析结果放到 channel 中
+			if state.finished() {
+				var result resp.Reply
+				if state.msgType == '*' {
+					result = &reply.MultiBulkReply{Args: state.args}
+				} else if state.msgType == '$' {
+					result = &reply.BulkReply{Arg: state.args[0]}
+				}
+				ch <- &Payload{
+					Data: result,
+					Err:  err,
+				}
+				state = readState{} // 重置状态
+			}
+		}
+	}
 }
 
 func readLine(bufReader *bufio.Reader, state *readState) ([]byte, bool, error) {
@@ -134,7 +243,7 @@ func parseBulkHeader(msg []byte, state *readState) error {
 	}
 }
 
-// parseSingleLineReplly
+// parseSingleLineReply
 func parseSingleLineReply(msg []byte) (resp.Reply, error) {
 	str := strings.TrimSuffix(string(msg), "\r\n") // 去掉 \r\n
 
