@@ -49,3 +49,16 @@ Redis Serialization Protocol，Redis序列化协议，是Redis的通信协议，
 
 实现Connection
 实现RespHandler方法，处理RESP协议
+
+test RESP 协议解析
+输出 `*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n`
+返回 
+```
+*3
+$3
+SET
+$3
+key
+$5
+value 
+```
