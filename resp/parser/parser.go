@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"bufio"
+	"errors"
 	"io"
 
 	"github.com/LynchQ/my-go-redis/interface/resp"
@@ -41,4 +43,39 @@ func ParseStream(reader io.Reader) <-chan *Payload {
 	go parse0(reader, ch)
 	// 3. 返回 channel
 	return ch
+}
+
+func readLine(bufReader *bufio.Reader, state *readState) ([]byte, bool, error) {
+	// eg: *3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n
+	// 不能简单的使用 ReadBytes('\r\n')，因为可能会读到一半
+	var msg []byte
+	var err error
+
+	// 没有预设长度，就按照 \r\n 来读取
+	if state.bulkLen == 0 {
+		// 1. 读取一行
+		msg, err = bufReader.ReadBytes('\n')
+		if err != nil {
+			return nil, true, err
+		}
+		if len(msg) == 0 || msg[len(msg)-2] != '\r' {
+			return nil, false, errors.New("protocol error: " + string(msg))
+		}
+	} else {
+		// 2. 如果是多行，就继续读取
+		// 有预设长度，就按照预设长度来读取
+		msg = make([]byte, state.bulkLen+2)
+		// io.ReadFull 会尝试读取指定长度的数据，如果读取不到，就会返回错误
+		// 读取到的数据会放到 msg 中
+		_, err = io.ReadFull(bufReader, msg)
+		if err != nil {
+			return nil, true, err
+		}
+		if len(msg) == 0 || msg[len(msg)-2] != '\r' || msg[len(msg)-1] != '\n' {
+			return nil, false, errors.New("protocol error: " + string(msg))
+		}
+		state.bulkLen = 0
+	}
+
+	return msg, false, nil
 }
