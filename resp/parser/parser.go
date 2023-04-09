@@ -155,3 +155,24 @@ func parseSingleLineReply(msg []byte) (resp.Reply, error) {
 	}
 	return result, nil
 }
+
+// 读取多批量回复或批量回复的非第一行
+func readBody(msg []byte, state *readState) error {
+	line := msg[0 : len(msg)-2] // 去掉 \r\n
+	var err error
+
+	if line[0] == '$' { // 批量回复
+		// bulk reply 批量回复
+		state.bulkLen, err = strconv.ParseInt(string(line[1:]), 10, 64) // 10进制 64位
+		if err != nil {
+			return errors.New("protocol error: " + string(msg)) // 协议错误
+		}
+		if state.bulkLen < 0 { // 如果长度是 -1，就是空值
+			state.args = append(state.args, []byte{})
+			state.bulkLen = 0
+		} else {
+			state.args = append(state.args, line[1:])
+		}
+	}
+	return nil
+}
