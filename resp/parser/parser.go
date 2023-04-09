@@ -107,3 +107,27 @@ func parseMultiBulkHeader(msg []byte, state *readState) error {
 		return errors.New("protocol error: " + string(msg)) // 协议错误
 	}
 }
+
+// parseBulkHeader 用来改变解析器的状态 (解析字符串)
+func parseBulkHeader(msg []byte, state *readState) error {
+	var err error
+	// 1. 解析出长度
+	state.bulkLen, err = strconv.ParseInt(string(msg[1:len(msg)-2]), 10, 64) // 10进制 64位
+	if err != nil {
+		return errors.New("protocol error: " + string(msg)) // 协议错误
+	}
+
+	// 2. 如果长度是 -1，就是空值
+	if state.bulkLen == -1 {
+		state.args = append(state.args, nil)
+		return nil
+	} else if state.bulkLen > 0 {
+		state.msgType = msg[0]            // 消息类型
+		state.redingMultiLine = true      // 是否正在读取多行
+		state.expectedArgsCount = 1       // 期望的参数个数
+		state.args = make([][]byte, 0, 1) // 命令参数
+		return nil
+	} else {
+		return errors.New("protocol error: " + string(msg)) // 协议错误
+	}
+}
