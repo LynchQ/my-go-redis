@@ -6,8 +6,8 @@ import (
 
 	"github.com/LynchQ/my-go-redis/config"
 	"github.com/LynchQ/my-go-redis/lib/logger"
+	"github.com/LynchQ/my-go-redis/resp/handler"
 	"github.com/LynchQ/my-go-redis/tcp"
-	EchoHandler "github.com/LynchQ/my-go-redis/tcp"
 )
 
 const configFile string = "redis.conf"
@@ -48,7 +48,8 @@ func main() {
 				config.Properties.Bind,
 				config.Properties.Port),
 		},
-		EchoHandler.MakeHandler())
+		// EchoHandler.MakeHandler())
+		handler.MakeHandler())
 	if err != nil {
 		logger.Error(err)
 	}
